@@ -4593,7 +4593,7 @@ private:
                         margins_work.data(),
                         params_base.fit_params_min_ctx,
                         params_base.verbosity >= 4 ? GGML_LOG_LEVEL_DEBUG : GGML_LOG_LEVEL_ERROR);
-                if (fit_status != COMMON_PARAMS_FIT_STATUS_SUCCESS || cparams_fit.n_ctx == 0) {
+                if (fit_status != COMMON_PARAMS_FIT_STATUS_SUCCESS) {
                     return false;
                 }
 
@@ -4633,7 +4633,10 @@ private:
                 for (size_t i = 0; i < margins_needed.size(); ++i) {
                     margins_needed[i] += std::max(mtp_by_device[i], mmproj_by_device[i]);
                 }
-                n_ctx_fit = cparams_fit.n_ctx;
+                // n_ctx == 0 means the fit left the context at the model default (dynamic-VBR
+                // floor pricing made the full trained context fit without a shrink). Resolve it
+                // to n_ctx_train so the MTP/target context width stays explicit.
+                n_ctx_fit = cparams_fit.n_ctx != 0 ? cparams_fit.n_ctx : hp_nct_mtp;
                 return true;
             };
 
@@ -4802,7 +4805,7 @@ private:
                         margins_work.data(),
                         params_trial.fit_params_min_ctx,
                         params_trial.verbosity >= 4 ? GGML_LOG_LEVEL_DEBUG : GGML_LOG_LEVEL_ERROR);
-                if (fit_status != COMMON_PARAMS_FIT_STATUS_SUCCESS || cparams_trial.n_ctx == 0) {
+                if (fit_status != COMMON_PARAMS_FIT_STATUS_SUCCESS) {
                     return false;
                 }
 
@@ -4837,7 +4840,10 @@ private:
                         }
                     }
                 }
-                n_ctx_fit = cparams_trial.n_ctx;
+                // n_ctx == 0 means the fit left the context at the model default (dynamic-VBR
+                // floor pricing made the full trained context fit without a shrink). Resolve it
+                // to n_ctx_train so the MTP/target context width stays explicit.
+                n_ctx_fit = cparams_trial.n_ctx != 0 ? cparams_trial.n_ctx : hp_nct_mtp;
                 return true;
             };
 
