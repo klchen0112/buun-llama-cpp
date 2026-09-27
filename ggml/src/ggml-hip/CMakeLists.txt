@@ -81,6 +81,9 @@ file(GLOB SRCS "../ggml-cuda/template-instances/fattn-vec*turbo3_0*.cu")
 list(APPEND GGML_SOURCES_ROCM ${SRCS})
 file(GLOB SRCS "../ggml-cuda/template-instances/fattn-vec*turbo4_0*.cu")
 list(APPEND GGML_SOURCES_ROCM ${SRCS})
+# ROCmFPX vector instances are independent of the standard-quant selection.
+file(GLOB SRCS "../ggml-cuda/template-instances/fattn-vec*rocmfp*.cu")
+list(APPEND GGML_SOURCES_ROCM ${SRCS})
 
 ggml_add_backend_library(ggml-hip
                          ${GGML_HEADERS_ROCM}
@@ -119,6 +122,9 @@ endif()
 
 if (GGML_HIP_ROCWMMA_FATTN)
     add_compile_definitions(GGML_HIP_ROCWMMA_FATTN)
+endif()
+if (GGML_HIP_ROCMI4_W4A4)
+    add_compile_definitions(GGML_ROCMI4_W4A4=1)
 endif()
 
 if (NOT GGML_HIP_MMQ_MFMA)

@@ -224,10 +224,13 @@ option(GGML_HIP_NO_VMM                      "ggml: do not try to use HIP VMM"   
 # RDNA4 f16 prefill widening (cb0d7779c) is a measured win on this path.
 option(GGML_HIP_ROCWMMA_FATTN               "ggml: enable rocWMMA for FlashAttention"         OFF)
 option(GGML_HIP_MMQ_MFMA                    "ggml: enable MFMA MMA for CDNA in MMQ"           ON)
+option(GGML_HIP_FORCE_MMQ                   "ggml: use MMQ kernels instead of hipBLAS"        OFF)
 option(GGML_HIP_EXPORT_METRICS              "ggml: enable kernel perf metrics output"         OFF)
+option(GGML_HIP_ROCMI4_W4A4                 "ggml: enable lossy gfx1151 W4A4 MMQ for ROCmI4"  OFF)
 option(GGML_MUSA_GRAPHS                     "ggml: use MUSA graph, experimental, unstable"    OFF)
 option(GGML_MUSA_MUDNN_COPY                 "ggml: enable muDNN for accelerated copy"         OFF)
 option(GGML_VULKAN                          "ggml: use Vulkan"                                OFF)
+option(GGML_VULKAN_ROCMFP4_COOPMAT           "ggml: build experimental ROCmFP4 Vulkan CM1"     OFF)
 option(GGML_VULKAN_CHECK_RESULTS            "ggml: run Vulkan op checks"                      OFF)
 option(GGML_VULKAN_DEBUG                    "ggml: enable Vulkan debug output"                OFF)
 option(GGML_VULKAN_MEMORY_DEBUG             "ggml: enable Vulkan memory debug output"         OFF)

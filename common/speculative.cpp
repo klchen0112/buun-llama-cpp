@@ -6075,6 +6075,8 @@ void common_speculative_accept(common_speculative * spec, llama_seq_id seq_id, u
 
 // TODO: support the case of more than one speculative implementations having a state
 bool common_speculative_get_state(common_speculative * spec, llama_seq_id seq_id, std::vector<uint8_t> & data) {
+    data.clear();
+
     if (spec == nullptr) {
         return false;
     }
@@ -6110,6 +6112,10 @@ void common_speculative_sequence_transition(
 
     for (auto & impl : spec->impls) {
         impl->sequence_transition(seq_id, event);
+    }
+
+    if (seq_id >= 0 && seq_id < (llama_seq_id) spec->dparams.size()) {
+        spec->dparams[seq_id].drafting = false;
     }
 }
 

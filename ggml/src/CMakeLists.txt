@@ -209,6 +209,10 @@ add_library(ggml-base
             ggml-turbo-quant.c
             ../include/ggml-turbo-meansub.h
             ggml-turbo-meansub.cpp
+            ../rocmfp4/rocmfp4.c
+            ../rocmfp4/rocmfp4.h
+            ../rocmfpx/rocmfpx.c
+            ../rocmfpx/rocmfpx.h
             gguf.cpp)
 
 set_target_properties(ggml-base PROPERTIES

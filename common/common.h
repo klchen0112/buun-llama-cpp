@@ -398,6 +398,7 @@ struct common_params_speculative_ngram_cache {
 
 struct common_params_speculative {
     std::vector<enum common_speculative_type> types = { COMMON_SPECULATIVE_TYPE_NONE };
+    bool mtp_strict_qwen = false;
 
     double synth_len = -1.0;
     std::vector<double> synth_rates;
@@ -478,7 +479,7 @@ struct common_params_speculative {
             return t == COMMON_SPECULATIVE_TYPE_DRAFT_MTP || t == COMMON_SPECULATIVE_TYPE_DRAFT_EAGLE3 || t == COMMON_SPECULATIVE_TYPE_DRAFT_DFLASH || t == COMMON_SPECULATIVE_TYPE_DRAFT_DSPARK;
         });
 
-        return needs_rs_seq ? draft.n_max : 0u;
+        return needs_rs_seq ? (uint32_t) std::max<int32_t>(0, draft.n_max) : 0u;
     }
 
     // model-free self-speculation (no -md): drafts come from the target context alone but are

@@ -121,3 +121,7 @@
 /build-xcframework.sh                   @danbev
 requirements*.txt                       @CISC
 /skills                                 @ngxson
+
+# ROCmFPX downstream ownership. Keep this final catch-all last so the local
+# maintainers take precedence over inherited upstream ownership mappings.
+*                                       @ROCmFPX @charlie12345

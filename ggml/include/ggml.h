@@ -493,7 +493,22 @@ extern "C" {
         GGML_TYPE_EXL3N_7 = 89,
         GGML_TYPE_EXL3N_8 = 90,
         GGML_TYPE_PTQ1_0 = 91, // Prism ternary group-128; GGUF wire id 143
-        GGML_TYPE_COUNT   = 92,
+        // Downstream ROCmFPX formats live in a reserved range so new upstream
+        // GGML types can continue to use the compact, append-only sequence.
+        GGML_TYPE_Q4_0_ROCMFP4      = 100, // dual UE4M3 scales + packed AMD FP4 blocks
+        GGML_TYPE_Q4_0_ROCMFP4_FAST = 101, // single-scale speed layout
+        GGML_TYPE_Q6_0_ROCMFPX      = 102, // 6-bit UE4M3-scale layout
+        GGML_TYPE_Q8_0_ROCMFPX      = 103, // 8-bit UE4M3-scale layout
+        GGML_TYPE_Q3_0_ROCMFPX      = 104, // 3-bit UE4M3-scale layout
+        // 105-106 reserved: canonical TurboQuant ids live at 43-44 (see above)
+        // Type 107 was emitted with two incompatible 10-byte ROCmFP2 layouts.
+        // It is retained only so readers can reject ambiguous legacy files.
+        GGML_TYPE_Q2_0_ROCMFPX_LEGACY_AMBIGUOUS = 107,
+        GGML_TYPE_Q4_0_ROCMI4       = 108, // exact signed-nibble 4-bit + UE4M3 scale
+        GGML_TYPE_Q5_0_ROCMFPX      = 109, // 5-bit signed linear + dual UE4M3 scales
+        GGML_TYPE_Q7_0_ROCMFPX      = 110, // 7-bit signed linear + dual UE4M3 scales
+        GGML_TYPE_Q2_0_ROCMFPX      = 111, // 2-bit S40 codebook + dual UE4M3 scales
+        GGML_TYPE_COUNT             = 112,
     };
 
     // EXL3 helpers: the type encodes the bit width and the codebook.
@@ -628,6 +643,28 @@ extern "C" {
         GGML_FTYPE_MOSTLY_Q1_0    = 27, // except 1d tensors
         GGML_FTYPE_MOSTLY_Q2_0    = 28, // except 1d tensors
         GGML_FTYPE_MOSTLY_PTQ1_0 = 129,
+        GGML_FTYPE_MOSTLY_Q4_0_ROCMFP4              = 100,
+        GGML_FTYPE_MOSTLY_Q4_0_ROCMFP4_LEAN         = 101,
+        GGML_FTYPE_MOSTLY_Q4_0_ROCMFP4_COHERENT     = 102,
+        GGML_FTYPE_MOSTLY_Q4_0_ROCMFP4_FAST         = 103,
+        GGML_FTYPE_MOSTLY_Q4_0_ROCMFP4_FAST_COHERENT = 104,
+        GGML_FTYPE_MOSTLY_Q4_0_ROCMFP4_STRIX        = 105,
+        GGML_FTYPE_MOSTLY_Q4_0_ROCMFP4_STRIX_LEAN   = 106,
+        GGML_FTYPE_MOSTLY_Q6_0_ROCMFPX              = 110,
+        GGML_FTYPE_MOSTLY_Q8_0_ROCMFPX              = 111,
+        GGML_FTYPE_MOSTLY_Q3_0_ROCMFPX              = 112,
+        GGML_FTYPE_MOSTLY_Q3_0_ROCMFPX_AGENT        = 113,
+        GGML_FTYPE_MOSTLY_Q6_0_ROCMFPX_AGENT        = 114,
+        GGML_FTYPE_MOSTLY_Q8_0_ROCMFPX_AGENT        = 115,
+        GGML_FTYPE_MOSTLY_Q6_0_ROCMFPX_LEAN         = 116,
+        GGML_FTYPE_MOSTLY_Q6_0_ROCMFPX_AGENT_LEAN   = 117,
+        GGML_FTYPE_MOSTLY_Q4_0_ROCMI4               = 118,
+        GGML_FTYPE_MOSTLY_Q2_0_ROCMFPX              = 119,
+        GGML_FTYPE_MOSTLY_Q5_0_ROCMFPX              = 120,
+        GGML_FTYPE_MOSTLY_Q5_0_ROCMFPX_AGENT        = 121,
+        GGML_FTYPE_MOSTLY_Q7_0_ROCMFPX              = 122,
+        GGML_FTYPE_MOSTLY_Q7_0_ROCMFPX_AGENT        = 123,
+        GGML_FTYPE_MOSTLY_Q2_0_ROCMFPX_AGENT        = 124,
     };
 
     // available tensor operations:

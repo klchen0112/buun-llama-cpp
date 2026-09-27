@@ -63,6 +63,7 @@ set(LLAMA_CORE_SOURCES
             llama-safetensors-qwen35.cpp
             llama-safetensors-qwen4exp.cpp
             llama-safetensors-deepseek4.cpp
+            rocmfpx-plugin.cpp
             llama-vocab.cpp
             llama-cache-accounting.cpp
             llama-cache-budget.cpp
@@ -93,6 +94,7 @@ set(LLAMA_CORE_SOURCES
 
 add_library(llama
             ../include/llama.h
+            ../include/rocmfpx-plugin.h
             ${LLAMA_CORE_SOURCES}
             unicode.h
             ${LLAMA_MODELS_SOURCES}
@@ -118,6 +120,7 @@ target_include_directories(llama PUBLIC ../include)
 target_compile_features   (llama PRIVATE cxx_std_17) # don't bump
 
 target_link_libraries(llama PUBLIC ggml)
+target_link_libraries(llama PRIVATE ${CMAKE_DL_LIBS})
 
 if (BUILD_SHARED_LIBS)
     set_target_properties(llama PROPERTIES POSITION_INDEPENDENT_CODE ON)

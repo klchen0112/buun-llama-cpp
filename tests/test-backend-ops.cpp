@@ -5369,6 +5369,10 @@ struct test_mul_mat : public test_case {
         if ((type_a == GGML_TYPE_MXFP4 || type_a == GGML_TYPE_NVFP4) && backend_has_feature(backend, "BLACKWELL_NATIVE_FP4")) {
             return 2e-2;
         }
+        // W4A4 quantizes activations to IU4; exact ROCmI4 keeps the normal threshold.
+        if (type_a == GGML_TYPE_Q4_0_ROCMI4 && backend_has_feature(backend, "ROCMI4_W4A4")) {
+            return 1e-2;
+        }
         return max_nmse_err();
     }
 
@@ -6712,6 +6716,10 @@ struct test_mul_mat_id : public test_case {
         // for blackwell we quantize activations to mxfp4 instead of q8_1 so we add higher tolerance
         if ((type_a == GGML_TYPE_MXFP4 || type_a == GGML_TYPE_NVFP4) && backend_has_feature(backend, "BLACKWELL_NATIVE_FP4")) {
             return 2e-2;
+        }
+        // Match test_mul_mat for the advertised W4A4 activation path.
+        if (type_a == GGML_TYPE_Q4_0_ROCMI4 && backend_has_feature(backend, "ROCMI4_W4A4")) {
+            return 1e-2;
         }
         return max_nmse_err();
     }
@@ -10572,6 +10580,14 @@ static const ggml_type all_types[] = {
     GGML_TYPE_Q1_0,
     GGML_TYPE_Q2_0,
     GGML_TYPE_Q2_0_G128, GGML_TYPE_PTQ1_0,
+    GGML_TYPE_Q2_0_ROCMFPX,
+    GGML_TYPE_Q3_0_ROCMFPX,
+    GGML_TYPE_Q4_0_ROCMFP4, GGML_TYPE_Q4_0_ROCMFP4_FAST,
+    GGML_TYPE_Q4_0_ROCMI4,
+    GGML_TYPE_Q5_0_ROCMFPX,
+    GGML_TYPE_Q6_0_ROCMFPX,
+    GGML_TYPE_Q7_0_ROCMFPX,
+    GGML_TYPE_Q8_0_ROCMFPX,
     GGML_TYPE_MXFP4, GGML_TYPE_NVFP4,
     GGML_TYPE_Q2_K, GGML_TYPE_Q3_K,
     GGML_TYPE_Q4_K, GGML_TYPE_Q5_K,
@@ -11992,6 +12008,14 @@ static std::vector<std::unique_ptr<test_case>> make_test_cases_eval() {
     // this case is verified (pass) in Intel(R) Data Center GPU Max 1100 (sycl backend) and NV A30 (cuda backend)
     // test_cases.emplace_back(new test_mul_mat(GGML_TYPE_F16, GGML_TYPE_F16, 512, 262144, 9216, {1, 1}, {1, 1}));
 
+    // ROCmFP4 matrix tiles and MoE tails, with scalar and CM1 backends.
+    for (ggml_type type : {GGML_TYPE_Q4_0_ROCMFP4, GGML_TYPE_Q4_0_ROCMFP4_FAST}) {
+        for (int n : {37, 257}) {
+            test_cases.emplace_back(new test_mul_mat(type, GGML_TYPE_F32, 513, n, 4096, std::array<int64_t, 2>{1, 1}, std::array<int64_t, 2>{1, 1}));
+            test_cases.emplace_back(new test_mul_mat_id(type, GGML_TYPE_F32, 16, 8, false, 769, n, 4096));
+        }
+    }
+
     // test large experts*tokens
     for (bool b : {false, true}) {
         test_cases.emplace_back(new test_mul_mat_id(GGML_TYPE_F16, GGML_TYPE_F32, 16, 16, b, 32, 1024, 16));
@@ -12688,6 +12712,19 @@ static std::vector<std::unique_ptr<test_case>> make_test_cases_eval() {
     test_cases.emplace_back(new test_flash_attn_ext(576, 512, 1, {20, 1},  113,   1, true, false, 0, 0, GGML_PREC_F32, GGML_TYPE_Q4_0, GGML_TYPE_Q4_0, {0, 1, 2, 3}, true, true));
     test_cases.emplace_back(new test_flash_attn_ext(576, 512, 1, {20, 1}, 1024,   1, true, false, 0, 0, GGML_PREC_F32, GGML_TYPE_Q4_0, GGML_TYPE_Q4_0, {0, 1, 2, 3}, true, true));
     test_cases.emplace_back(new test_flash_attn_ext(576, 512, 1, {20, 1}, 1024,  64, true, false, 0, 0, GGML_PREC_F32, GGML_TYPE_Q4_0, GGML_TYPE_Q4_0, {0, 1, 2, 3}, true, true));
+    // Qwen4Exp: short GQA batches use the Vulkan split-K reduction shader.
+    for (int nb : {1, 4, 21}) {
+        test_cases.emplace_back(new test_flash_attn_ext(256, 256, 2, {12, 1}, 256, nb, true, false, 0, 0,
+            GGML_PREC_F32, GGML_TYPE_F16, GGML_TYPE_F16));
+    }
+
+    // Sparse mask hint: supported decode/prefill layouts and dense fallbacks.
+    test_cases.emplace_back(new test_flash_attn_ext(512, 512, 1, { 8, 1}, 4096, 1, true, false, 0, 0, GGML_PREC_F32, GGML_TYPE_F16, GGML_TYPE_F16, {0, 1, 2, 3}, true, false,  512));
+    test_cases.emplace_back(new test_flash_attn_ext(512, 512, 1, { 8, 2}, 4096, 3, true, false, 0, 0, GGML_PREC_F32, GGML_TYPE_F16, GGML_TYPE_F16, {0, 1, 2, 3}, true, false,  768));
+    test_cases.emplace_back(new test_flash_attn_ext(576, 512, 1, {16, 1}, 4096, 1, true, false, 0, 0, GGML_PREC_F32, GGML_TYPE_F16, GGML_TYPE_F16, {0, 1, 2, 3}, true, true,   512));
+    test_cases.emplace_back(new test_flash_attn_ext(576, 512, 1, {16, 2}, 4096, 2, true, false, 0, 0, GGML_PREC_F32, GGML_TYPE_F16, GGML_TYPE_F16, {0, 1, 2, 3}, true, true,   768));
+    test_cases.emplace_back(new test_flash_attn_ext(512, 512, 1, { 8, 1}, 4096, 1, true, false, 0, 0, GGML_PREC_F32, GGML_TYPE_F16, GGML_TYPE_F16, {0, 1, 2, 3}, true, false, 2304));
+    test_cases.emplace_back(new test_flash_attn_ext(256, 256, 1, { 8, 1}, 4096, 1, true, false, 0, 0, GGML_PREC_F32, GGML_TYPE_F16, GGML_TYPE_F16, {0, 1, 2, 3}, true, false,  512));
 
     // more V-is-sub-view-of-K cases: other head shapes, and full views with equal head sizes
     test_cases.emplace_back(new test_flash_attn_ext(320, 256, 1, {32, 1}, 512, 1, true, false, 0, 0, GGML_PREC_F32, GGML_TYPE_F16, GGML_TYPE_F16, {0, 1, 2, 3}, true, true));
@@ -13046,6 +13083,13 @@ static std::vector<std::unique_ptr<test_case>> make_test_cases_perf() {
             test_cases.emplace_back(new test_mul_mat_id(type, GGML_TYPE_F32, 512, 10, false, 2560, 1, 640));
         }
     }
+    // Long-sequence Mamba-2 shapes that select the SSD matmul path on capable
+    // CUDA/HIP devices. GGML_CUDA_DISABLE_SSD=1 provides a same-binary scan
+    // baseline for tuning and regression measurements.
+    test_cases.emplace_back(new test_ssm_scan(
+        GGML_TYPE_F32, 128, 80, 128, 1, 256, 1, false, 1, false));
+    test_cases.emplace_back(new test_ssm_scan(
+        GGML_TYPE_F32, 128, 64, 80, 8, 300, 2, false, 1, false));
 
     // SWIGLU at a 27B-class FFN width, fused [gate|up] vs split operands
     // note: same bytes either way, so a backend that indexes them differently shows it here

@@ -77,14 +77,47 @@ static __global__ void flash_attn_ext_vec(
 
 #ifdef GGML_USE_HIP
 #ifdef RDNA
-    constexpr int nthreads_KQ_q = 2;
+    constexpr int nthreads_KQ_q_default = 2;
+    constexpr int nthreads_KQ_q_rocmfp4_default = 1;
 #else
-    constexpr int nthreads_KQ_q = 4;
+    constexpr int nthreads_KQ_q_default = 4;
+    constexpr int nthreads_KQ_q_rocmfp4_default = nthreads_KQ_q_default;
 #endif // RDNA
-    constexpr int nthreads_V_q  = (D/4 < 32 ? D/4 : 32);
+    constexpr bool type_K_rocmfp4 = type_K == GGML_TYPE_Q4_0_ROCMFP4 || type_K == GGML_TYPE_Q4_0_ROCMFP4_FAST;
+    constexpr bool type_K_rocmfpx = type_K == GGML_TYPE_Q3_0_ROCMFPX || type_K == GGML_TYPE_Q6_0_ROCMFPX || type_K == GGML_TYPE_Q8_0_ROCMFPX;
+    constexpr bool type_V_rocmfp4 = type_V == GGML_TYPE_Q4_0_ROCMFP4 || type_V == GGML_TYPE_Q4_0_ROCMFP4_FAST;
+#ifndef GGML_ROCMFP4_FATTN_KQ_NTHREADS
+#define GGML_ROCMFP4_FATTN_KQ_NTHREADS nthreads_KQ_q_rocmfp4_default
+#endif
+#ifndef GGML_ROCMFPX_FATTN_KQ_NTHREADS
+#define GGML_ROCMFPX_FATTN_KQ_NTHREADS nthreads_KQ_q_default
+#endif
+#ifndef GGML_ROCMFP4_FATTN_V_NTHREADS
+#define GGML_ROCMFP4_FATTN_V_NTHREADS 2
+#endif
+#ifndef GGML_ROCMFP4_FATTN_V_NTHREADS_D128_DUAL
+#define GGML_ROCMFP4_FATTN_V_NTHREADS_D128_DUAL 4
+#endif
+#ifndef GGML_ROCMFP4_FATTN_V_ROWS_PER_THREAD
+#define GGML_ROCMFP4_FATTN_V_ROWS_PER_THREAD 8
+#endif
+#if GGML_ROCMFP4_FATTN_V_ROWS_PER_THREAD != 2 && \
+    GGML_ROCMFP4_FATTN_V_ROWS_PER_THREAD != 4 && \
+    GGML_ROCMFP4_FATTN_V_ROWS_PER_THREAD != 8
+#error "GGML_ROCMFP4_FATTN_V_ROWS_PER_THREAD must be 2, 4, or 8"
+#endif
+    constexpr int nthreads_KQ_q = type_K_rocmfp4 ? GGML_ROCMFP4_FATTN_KQ_NTHREADS :
+                                  type_K_rocmfpx ? GGML_ROCMFPX_FATTN_KQ_NTHREADS :
+                                  nthreads_KQ_q_default;
+    constexpr int nthreads_V_q_rocmfp4 =
+        type_V == GGML_TYPE_Q4_0_ROCMFP4 && D == 128 ? GGML_ROCMFP4_FATTN_V_NTHREADS_D128_DUAL :
+        GGML_ROCMFP4_FATTN_V_NTHREADS;
+    constexpr int nthreads_V_q  = type_V_rocmfp4 ? nthreads_V_q_rocmfp4 : (D/4 < 32 ? D/4 : 32);
+    constexpr int V_rows_per_thread_q = type_V_rocmfp4 ? GGML_ROCMFP4_FATTN_V_ROWS_PER_THREAD : 4;
 #else
     constexpr int nthreads_KQ_q = (D/4 < 32 ? D/4 : 32);
     constexpr int nthreads_V_q  = (D/4 < 32 ? D/4 : 32);
+    constexpr int V_rows_per_thread_q = 4;
 #endif // GGML_USE_HIP
 
     constexpr int nthreads    = ggml_cuda_fattn_vec_get_nthreads_device();
@@ -284,6 +317,13 @@ static __global__ void flash_attn_ext_vec(
     // pressure and eliminates 22 syncthreads per decode token (D=256).
 
     const int k_VKQ_max = KV_max ? KV_max[sequence*gridDim.x + blockIdx.x] : ne11;
+#ifdef GGML_USE_HIP
+    constexpr bool turbo_kv = type_K == GGML_TYPE_TURBO3_0 || type_K == GGML_TYPE_TURBO4_0 ||
+                              type_V == GGML_TYPE_TURBO3_0 || type_V == GGML_TYPE_TURBO4_0;
+    const int32_t mask_row_stride = turbo_kv ? nb31 / (int32_t) sizeof(half) : ne11;
+#else
+    const int32_t mask_row_stride = ne11;
+#endif
     K     += blockIdx.y*nthreads * nb11;
     V     += blockIdx.y*nthreads * nb21;
     maskh += blockIdx.y*nthreads;
@@ -323,7 +363,7 @@ static __global__ void flash_attn_ext_vec(
                 }
 
                 if (mask && (ncols == 1 || ic0 + j < int(ne01.z))) {
-                    sum += slope*__half2float(maskh[j*ne11 + i_KQ]);
+                    sum += slope*__half2float(maskh[j*mask_row_stride + i_KQ]);
                 }
 
                 KQ_max_new[j] = fmaxf(KQ_max_new[j], sum + FATTN_KQ_MAX_OFFSET);
@@ -714,3 +754,19 @@ EXTERN_DECL_FATTN_VEC_CASES( 64, GGML_TYPE_TURBO4_0)
 EXTERN_DECL_FATTN_VEC_CASES(128, GGML_TYPE_TURBO4_0)
 EXTERN_DECL_FATTN_VEC_CASES(256, GGML_TYPE_TURBO4_0)
 EXTERN_DECL_FATTN_VEC_CASES(512, GGML_TYPE_TURBO4_0)
+extern DECL_FATTN_VEC_CASE( 64, GGML_TYPE_Q4_0_ROCMFP4,      GGML_TYPE_Q4_0_ROCMFP4);
+extern DECL_FATTN_VEC_CASE(128, GGML_TYPE_Q4_0_ROCMFP4,      GGML_TYPE_Q4_0_ROCMFP4);
+extern DECL_FATTN_VEC_CASE(256, GGML_TYPE_Q4_0_ROCMFP4,      GGML_TYPE_Q4_0_ROCMFP4);
+extern DECL_FATTN_VEC_CASE( 64, GGML_TYPE_Q4_0_ROCMFP4_FAST, GGML_TYPE_Q4_0_ROCMFP4_FAST);
+extern DECL_FATTN_VEC_CASE(128, GGML_TYPE_Q4_0_ROCMFP4_FAST, GGML_TYPE_Q4_0_ROCMFP4_FAST);
+extern DECL_FATTN_VEC_CASE(256, GGML_TYPE_Q4_0_ROCMFP4_FAST, GGML_TYPE_Q4_0_ROCMFP4_FAST);
+
+extern DECL_FATTN_VEC_CASE( 64, GGML_TYPE_Q3_0_ROCMFPX, GGML_TYPE_Q3_0_ROCMFPX);
+extern DECL_FATTN_VEC_CASE(128, GGML_TYPE_Q3_0_ROCMFPX, GGML_TYPE_Q3_0_ROCMFPX);
+extern DECL_FATTN_VEC_CASE(256, GGML_TYPE_Q3_0_ROCMFPX, GGML_TYPE_Q3_0_ROCMFPX);
+extern DECL_FATTN_VEC_CASE( 64, GGML_TYPE_Q6_0_ROCMFPX, GGML_TYPE_Q6_0_ROCMFPX);
+extern DECL_FATTN_VEC_CASE(128, GGML_TYPE_Q6_0_ROCMFPX, GGML_TYPE_Q6_0_ROCMFPX);
+extern DECL_FATTN_VEC_CASE(256, GGML_TYPE_Q6_0_ROCMFPX, GGML_TYPE_Q6_0_ROCMFPX);
+extern DECL_FATTN_VEC_CASE( 64, GGML_TYPE_Q8_0_ROCMFPX, GGML_TYPE_Q8_0_ROCMFPX);
+extern DECL_FATTN_VEC_CASE(128, GGML_TYPE_Q8_0_ROCMFPX, GGML_TYPE_Q8_0_ROCMFPX);
+extern DECL_FATTN_VEC_CASE(256, GGML_TYPE_Q8_0_ROCMFPX, GGML_TYPE_Q8_0_ROCMFPX);

@@ -54,11 +54,10 @@ void llama_model_qwen4exp::load_arch_hparams(llama_model_loader & ml) {
     hparams.n_embd_out_impl = hparams.dsv4_hc_mult * hparams.n_embd;
 
     ml.get_key(LLM_KV_NEXTN_PREDICT_LAYERS, hparams.n_layer_nextn, false);
-    if (hparams.n_layer_nextn > 1) {
+    if (hparams.n_layer_nextn > 1 || hparams.n_layer_nextn == hparams.n_layer_all) {
         throw std::runtime_error(format(
-                "qwen4exp supports at most one MTP draft block, model declares %u",
-                hparams.n_layer_nextn));
-    }
+                "qwen4exp requires trunk layers and supports at most one MTP draft block, model declares %u",
+                hparams.n_layer_nextn));    }
     ml.get_key(LLM_KV_ATTENTION_INDEXER_HEAD_COUNT, hparams.indexer_n_head);
     ml.get_key(LLM_KV_ATTENTION_INDEXER_KEY_LENGTH, hparams.indexer_head_size);
     ml.get_key(LLM_KV_ATTENTION_INDEXER_TOP_K,      hparams.indexer_top_k);
@@ -168,11 +167,14 @@ void llama_model_qwen4exp::load_arch_tensors(llama_model_loader & ml) {
     const int64_t hc_dim = hc * n_embd;
     const int64_t hc_lr  = hparams.hc_low_rank;
 
-    // A PR-compatible standalone MTP artifact contains the trailing draft
-    // block and shared embedding/head, but no target trunk or target HC head.
-    const bool mtp_only = ml.load_mtp && hparams.n_layer_nextn > 0 &&
-        !ml.has_tensor("blk.0.hc_attn_norm.weight");
-    const int trunk_flags = mtp_only ? TENSOR_NOT_REQUIRED : 0;
+    // An MTP-only file carries just the draft block. Keep walking the trunk so the
+    // per-layer bookkeeping still runs, but let its tensors be absent.
+    const bool mtp_only = !ml.files.empty() && hparams.n_layer_nextn > 0 &&
+                         ml.get_weight("blk.0.hc_attn_norm.weight") == nullptr;
+    if (mtp_only && !ml.load_mtp) {
+        throw std::runtime_error("qwen4exp MTP-only weights must be loaded as a draft model");
+    }
+    const int  trunk_flags = mtp_only ? TENSOR_NOT_REQUIRED : 0;
 
     tok_embd = create_tensor(tn(LLM_TENSOR_TOKEN_EMBD, "weight"), { n_embd, n_vocab }, 0);
 
@@ -186,7 +188,7 @@ void llama_model_qwen4exp::load_arch_tensors(llama_model_loader & ml) {
         output = create_tensor(tn(LLM_TENSOR_TOKEN_EMBD, "weight"), { n_embd, n_vocab }, TENSOR_DUPLICATED);
     }
 
-    // flat [ple_head_dim, n_rows] gather target
+    // flat joined table or one table per n-gram head
     if (hparams.ple_n_heads > 0) {
         // the head ranges are what the gather indexes, so they set the minimum row count
         int64_t ple_rows = 0;
@@ -196,28 +198,48 @@ void llama_model_qwen4exp::load_arch_tensors(llama_model_loader & ml) {
 
         // the converter pads the table; a model synthesised from metadata has no tensor to ask
         const std::string ple_name = tn(LLM_TENSOR_PER_LAYER_TOKEN_EMBD, "weight").str();
-        ggml_type ple_type = GGML_TYPE_COUNT;
-        std::array<int64_t, GGML_MAX_DIMS> ple_shape = {};
-        if (ml.get_tensor_info(ple_name.c_str(), ple_type, ple_shape)) {
-            if (ple_shape[1] < ple_rows) {
-                throw std::runtime_error(format("%s has %" PRId64 " rows, too few for the PLE head ranges (%" PRId64 ")",
-                                                ple_name.c_str(), ple_shape[1], ple_rows));
+        int64_t table_rows = 0;
+        bool has_joined = false;
+        if (ml.files.empty()) {
+            // llama_model_init_from_user() carries tensor overrides directly in
+            // the caller-owned GGUF context and intentionally has no file-backed
+            // weight map.
+            const int64_t tid = gguf_find_tensor(ml.metadata, ple_name.c_str());
+            if (tid >= 0) {
+                table_rows = gguf_get_tensor_ne(ml.metadata, tid)[1];
+                has_joined = true;
             }
-            ple_rows = ple_shape[1];
+        } else if (const auto * ple_w = ml.get_weight(ple_name.c_str())) {
+            // A file-backed PLE table may live in any shard, so use the unified
+            // weight map instead of looking only in the first GGUF context.
+            table_rows = ple_w->tensor->ne[1];
+            has_joined = true;
         }
-
-        per_layer_tok_embd = create_tensor(tn(LLM_TENSOR_PER_LAYER_TOKEN_EMBD, "weight"),
-                                           { hparams.ple_head_dim, ple_rows }, TENSOR_READ_LAZY);
-        const int scale_flags = per_layer_tok_embd->type == GGML_TYPE_F8_E4M3 ? 0 : TENSOR_NOT_REQUIRED;
-        per_layer_tok_embd_scale = create_tensor(tn(LLM_TENSOR_PER_LAYER_TOKEN_EMBD, "scale"),
-                                                 { 1 }, scale_flags);
-        per_layer_tok_embd_bias = create_tensor(tn(LLM_TENSOR_PER_LAYER_TOKEN_EMBD, "bias"),
-                                                { hparams.ple_head_dim, hparams.ple_n_heads }, TENSOR_NOT_REQUIRED);
+        if (has_joined) {
+            if (table_rows < ple_rows) {
+                throw std::runtime_error(format("%s has %" PRId64 " rows, too few for the PLE head ranges (%" PRId64 ")",
+                                                ple_name.c_str(), table_rows, ple_rows));
+            }
+            ple_rows = table_rows;
+            per_layer_tok_embd = create_tensor(tn(LLM_TENSOR_PER_LAYER_TOKEN_EMBD, "weight"),
+                                               { hparams.ple_head_dim, ple_rows }, TENSOR_READ_LAZY);
+            const int scale_flags = per_layer_tok_embd->type == GGML_TYPE_F8_E4M3 ? 0 : TENSOR_NOT_REQUIRED;
+            per_layer_tok_embd_scale = create_tensor(tn(LLM_TENSOR_PER_LAYER_TOKEN_EMBD, "scale"),
+                                                     { 1 }, scale_flags);
+            per_layer_tok_embd_bias = create_tensor(tn(LLM_TENSOR_PER_LAYER_TOKEN_EMBD, "bias"),
+                                                    { hparams.ple_head_dim, hparams.ple_n_heads }, TENSOR_NOT_REQUIRED);
+        } else {
+            uint32_t ple_layer = 0;
+            while (ple_layer < hparams.n_layer_all && !hparams.is_ple(ple_layer)) {
+                ++ple_layer;
+            }
+            ple_ngram_embd.resize(hparams.ple_n_heads);
+            for (uint32_t h = 0; h < hparams.ple_n_heads; ++h) {
+                ple_ngram_embd[h] = create_tensor(tn(LLM_TENSOR_PLE_NGRAM_EMBD, "weight", ple_layer, h),
+                                                  { hparams.ple_head_dim, (int64_t) hparams.ple_head_vocab_sizes[h] }, 0);
+            }
+        }
     }
-
-    // A standalone MTP artifact contains the draft block and shared input/output
-    // tensors, but none of the target trunk. Preserve layer bookkeeping while
-    // allowing those trunk tensors to be absent.
     for (int il = 0; il < n_layer; ++il) {
         auto & layer = layers[il];
 
@@ -291,8 +313,11 @@ void llama_model_qwen4exp::load_arch_tensors(llama_model_loader & ml) {
     // qwen4exp layer plus the three NextN input tensors. Target-only model loads
     // skip these tensors; draft-model loads require them.
     for (int il = n_layer; il < n_layer + (int) hparams.n_layer_nextn; ++il) {
+        if (ml.files.empty() && !ml.load_mtp) {
+            continue;
+        }
         auto & layer = layers[il];
-        const int flags = ml.load_mtp ? 0 : TENSOR_SKIP;
+        const int flags = ml.load_mtp ? 0 : TENSOR_SKIP | TENSOR_SKIP_IF_VIRTUAL;
 
         const int64_t n_ff_exp   = hparams.n_ff_exp(il) ? hparams.n_ff_exp(il) : hparams.n_ff(il) / hparams.n_expert_used(il);
         const int64_t n_ff_shexp = hparams.n_ff_shexp ? hparams.n_ff_shexp : n_ff;
@@ -302,8 +327,7 @@ void llama_model_qwen4exp::load_arch_tensors(llama_model_loader & ml) {
         layer.hc_attn_down   = create_tensor(tn(LLM_TENSOR_HC_ATTN_DOWN,   "weight", il), { hc_dim, hc_lr }, flags);
         layer.hc_attn_up     = create_tensor(tn(LLM_TENSOR_HC_ATTN_UP,     "weight", il), { hc_lr, hc_dim }, flags);
         layer.hc_attn_inject = create_tensor(tn(LLM_TENSOR_HC_ATTN_INJECT, "weight", il), { hc_dim, hc }, flags);
-        layer.hc_ffn_norm    = create_tensor(tn(LLM_TENSOR_HC_FFN_NORM,    "weight", il), { n_embd, hc }, flags | TENSOR_ALLOW_RESHAPE);
-        layer.hc_ffn_down    = create_tensor(tn(LLM_TENSOR_HC_FFN_DOWN,    "weight", il), { hc_dim, hc_lr }, flags);
+        layer.hc_ffn_norm    = create_tensor(tn(LLM_TENSOR_HC_FFN_NORM,    "weight", il), { n_embd, hc }, flags | TENSOR_ALLOW_RESHAPE);        layer.hc_ffn_down    = create_tensor(tn(LLM_TENSOR_HC_FFN_DOWN,    "weight", il), { hc_dim, hc_lr }, flags);
         layer.hc_ffn_up      = create_tensor(tn(LLM_TENSOR_HC_FFN_UP,      "weight", il), { hc_lr, hc_dim }, flags);
         layer.hc_ffn_inject  = create_tensor(tn(LLM_TENSOR_HC_FFN_INJECT,  "weight", il), { hc_dim, hc }, flags);
 
@@ -1495,6 +1519,7 @@ void llm_graph_input_ple::set_input(const llama_ubatch * ubatch) {
     const int64_t per_gram = hp.ple_heads_per_ngram;
     const int64_t eos      = hp.ple_eos_token_id;
     const int64_t n_prev   = n_gram - 1;
+    const bool split       = !pmodel.ple_ngram_embd.empty();
 
     std::vector<int32_t> idx(n_heads * n_tokens);
 
@@ -1528,8 +1553,8 @@ void llm_graph_input_ple::set_input(const llama_ubatch * ubatch) {
             const int64_t base = (n - 2) * per_gram;
             for (int64_t g = 0; g < per_gram; ++g) {
                 const int64_t h_i = base + g;
-                idx[i * n_heads + h_i] =
-                    (int32_t) (mixed % hp.ple_head_vocab_sizes[h_i] + hp.ple_head_offsets[h_i]);
+                const uint64_t local = mixed % hp.ple_head_vocab_sizes[h_i];
+                idx[i * n_heads + h_i] = (int32_t) (split ? local : local + hp.ple_head_offsets[h_i]);
             }
         }
     }
@@ -1606,15 +1631,25 @@ ggml_tensor * llama_model_qwen4exp::graph::build_inp_ple(
     res->add_input(std::move(ple_inp));
 
     // gather then flatten the heads: get_rows lays the head dimension out slowest, as the reference does
-    ggml_tensor * emb = ggml_get_rows(ctx0, model.per_layer_tok_embd, rows);
-    if (model.per_layer_tok_embd_scale) {
-        emb = ggml_mul(ctx0, emb, model.per_layer_tok_embd_scale);
-    }
-    if (model.per_layer_tok_embd_bias) {
-        // rows are ordered token-major, head-minor: add the per-head bias over [dim, head, token]
-        emb = ggml_reshape_3d(ctx0, emb, hparams.ple_head_dim, n_heads, n_tokens);
-        emb = ggml_add(ctx0, emb, ggml_reshape_3d(ctx0, model.per_layer_tok_embd_bias, hparams.ple_head_dim, n_heads, 1));
-    }
+    ggml_tensor * emb = nullptr;
+    if (model.ple_ngram_embd.empty()) {
+        emb = ggml_get_rows(ctx0, model.per_layer_tok_embd, rows);
+        if (model.per_layer_tok_embd_scale) {
+            emb = ggml_mul(ctx0, emb, model.per_layer_tok_embd_scale);
+        }
+        if (model.per_layer_tok_embd_bias) {
+            // rows are ordered token-major, head-minor: add the per-head bias over [dim, head, token]
+            emb = ggml_reshape_3d(ctx0, emb, hparams.ple_head_dim, n_heads, n_tokens);
+            emb = ggml_add(ctx0, emb, ggml_reshape_3d(ctx0, model.per_layer_tok_embd_bias, hparams.ple_head_dim, n_heads, 1));
+        }
+    } else {
+        ggml_tensor * rows_2d = ggml_reshape_2d(ctx0, rows, n_heads, n_tokens);
+        for (int64_t h = 0; h < n_heads; ++h) {
+            ggml_tensor * idx = ggml_view_2d(ctx0, rows_2d, 1, n_tokens, rows_2d->nb[1], h * rows_2d->nb[0]);
+            idx = ggml_reshape_1d(ctx0, ggml_cont(ctx0, idx), n_tokens);
+            ggml_tensor * emb_head = ggml_get_rows(ctx0, model.ple_ngram_embd[h], idx);
+            emb = emb ? ggml_concat(ctx0, emb, emb_head, 0) : emb_head;
+        }    }
     emb = ggml_reshape_2d(ctx0, emb, hparams.ple_head_dim * n_heads, n_tokens);
     cb(emb, "ple_embd", -1);
 

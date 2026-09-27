@@ -2065,6 +2065,12 @@ static fattn_vec_case_t ggml_cuda_get_fattn_vec_case(int64_t head_size, ggml_typ
     FATTN_VEC_CASES_ALL_D(GGML_TYPE_Q5_1, GGML_TYPE_BF16, GGML_CUDA_FA_Q5_1_BF16)
     FATTN_VEC_CASES_ALL_D(GGML_TYPE_Q8_0, GGML_TYPE_BF16, GGML_CUDA_FA_Q8_0_BF16)
     FATTN_VEC_CASES_ALL_D(GGML_TYPE_BF16, GGML_TYPE_BF16, GGML_CUDA_FA_BF16_BF16)
+
+    FATTN_VEC_CASES_ALL_D(GGML_TYPE_Q4_0_ROCMFP4,      GGML_TYPE_Q4_0_ROCMFP4,      true)
+    FATTN_VEC_CASES_ALL_D(GGML_TYPE_Q4_0_ROCMFP4_FAST, GGML_TYPE_Q4_0_ROCMFP4_FAST, true)
+    FATTN_VEC_CASES_ALL_D(GGML_TYPE_Q3_0_ROCMFPX,      GGML_TYPE_Q3_0_ROCMFPX,      true)
+    FATTN_VEC_CASES_ALL_D(GGML_TYPE_Q6_0_ROCMFPX,      GGML_TYPE_Q6_0_ROCMFPX,      true)
+    FATTN_VEC_CASES_ALL_D(GGML_TYPE_Q8_0_ROCMFPX,      GGML_TYPE_Q8_0_ROCMFPX,      true)
 #if defined(GGML_CUDA_TURBO_FA)
     FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO2_0, GGML_TYPE_TURBO2_0, true)
     FATTN_VEC_CASES_ALL_D_512(GGML_TYPE_TURBO3_0, GGML_TYPE_TURBO3_0, true)
@@ -2127,6 +2133,12 @@ static bool ggml_cuda_fattn_kv_type_supported(ggml_type type) {
         case GGML_TYPE_Q4_0:
         case GGML_TYPE_Q8_0:
         case GGML_TYPE_BF16:
+            return true;
+        case GGML_TYPE_Q4_0_ROCMFP4:
+        case GGML_TYPE_Q4_0_ROCMFP4_FAST:
+        case GGML_TYPE_Q3_0_ROCMFPX:
+        case GGML_TYPE_Q6_0_ROCMFPX:
+        case GGML_TYPE_Q8_0_ROCMFPX:
             return true;
         default:
             return false;
@@ -2235,6 +2247,19 @@ static best_fattn_kernel ggml_cuda_get_best_fattn_kernel(const int device, const
 
     // 192 satisfies % 64 == 0 but has no vec instance (DKQ != DV); force it onto the MMA path.
     const bool can_use_vector_kernel = Q->ne[0] <= 256 && Q->ne[0] % 64 == 0 && Q->ne[0] != 192 && K->ne[1] % FATTN_KQ_STRIDE == 0;
+
+    const bool is_rocmfp_family = K->type == GGML_TYPE_Q4_0_ROCMFP4 ||
+                                  K->type == GGML_TYPE_Q4_0_ROCMFP4_FAST ||
+                                  K->type == GGML_TYPE_Q3_0_ROCMFPX ||
+                                  K->type == GGML_TYPE_Q6_0_ROCMFPX ||
+                                  K->type == GGML_TYPE_Q8_0_ROCMFPX;
+
+    if (is_rocmfp_family) {
+        if (can_use_vector_kernel && Q->ne[1] <= 2) {
+            return BEST_FATTN_KERNEL_VEC;
+        }
+        return BEST_FATTN_KERNEL_NONE;
+    }
 
     // On Ampere, BF16 GQA decode is faster through VEC because it consumes the cache directly;
     // MMA first materializes the full K/V cache as F16. The advantage grows with context depth.

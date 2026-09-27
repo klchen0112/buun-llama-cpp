@@ -59,6 +59,137 @@ struct ggml_cuda_mmvq_fusion_args_device : ggml_cuda_mm_fusion_args_device {
     bool prefetch_weights = false; // immutable dense weights only
 };
 
+#ifndef GGML_ROCMFP4_RDNA35_NWARPS
+#define GGML_ROCMFP4_RDNA35_NWARPS 2
+#endif
+
+#if GGML_ROCMFP4_RDNA35_NWARPS != 1 && GGML_ROCMFP4_RDNA35_NWARPS != 2 && \
+    GGML_ROCMFP4_RDNA35_NWARPS != 4 && GGML_ROCMFP4_RDNA35_NWARPS != 8
+#error "GGML_ROCMFP4_RDNA35_NWARPS must be one of: 1, 2, 4, 8"
+#endif
+
+#ifndef GGML_ROCMFP4_RDNA35_NWARPS_MAX_NCOLS
+#define GGML_ROCMFP4_RDNA35_NWARPS_MAX_NCOLS 2
+#endif
+
+#if GGML_ROCMFP4_RDNA35_NWARPS_MAX_NCOLS < 1 || GGML_ROCMFP4_RDNA35_NWARPS_MAX_NCOLS > MMVQ_MAX_BATCH_SIZE
+#error "GGML_ROCMFP4_RDNA35_NWARPS_MAX_NCOLS must be between 1 and MMVQ_MAX_BATCH_SIZE"
+#endif
+
+#ifndef GGML_ROCMFP4_RDNA35_MMID_MAX_BATCH
+#define GGML_ROCMFP4_RDNA35_MMID_MAX_BATCH MMVQ_MAX_BATCH_SIZE
+#endif
+
+#if GGML_ROCMFP4_RDNA35_MMID_MAX_BATCH < 1 || GGML_ROCMFP4_RDNA35_MMID_MAX_BATCH > MMVQ_MAX_BATCH_SIZE
+#error "GGML_ROCMFP4_RDNA35_MMID_MAX_BATCH must be between 1 and MMVQ_MAX_BATCH_SIZE"
+#endif
+
+#ifndef GGML_ROCMFP4_RDNA35_RPB_WIDE
+#define GGML_ROCMFP4_RDNA35_RPB_WIDE 1
+#endif
+
+#if GGML_ROCMFP4_RDNA35_RPB_WIDE != 1 && GGML_ROCMFP4_RDNA35_RPB_WIDE != 2
+#error "GGML_ROCMFP4_RDNA35_RPB_WIDE must be 1 or 2"
+#endif
+
+#ifndef GGML_ROCMFP4_RDNA35_RPB_WIDE_DUAL
+#define GGML_ROCMFP4_RDNA35_RPB_WIDE_DUAL GGML_ROCMFP4_RDNA35_RPB_WIDE
+#endif
+
+#ifndef GGML_ROCMFP4_RDNA35_RPB_WIDE_FAST
+#define GGML_ROCMFP4_RDNA35_RPB_WIDE_FAST GGML_ROCMFP4_RDNA35_RPB_WIDE
+#endif
+
+#ifndef GGML_ROCMFP4_MOE_MMVQ_ROWS_PER_BLOCK
+#define GGML_ROCMFP4_MOE_MMVQ_ROWS_PER_BLOCK 2
+#endif
+
+#if GGML_ROCMFP4_MOE_MMVQ_ROWS_PER_BLOCK < 1 || GGML_ROCMFP4_MOE_MMVQ_ROWS_PER_BLOCK > 4
+#error "GGML_ROCMFP4_MOE_MMVQ_ROWS_PER_BLOCK must be between 1 and 4"
+#endif
+
+#ifndef GGML_ROCMFPX_RDNA35_NWARPS
+#define GGML_ROCMFPX_RDNA35_NWARPS 1
+#endif
+
+#if GGML_ROCMFPX_RDNA35_NWARPS != 1 && GGML_ROCMFPX_RDNA35_NWARPS != 2 && \
+    GGML_ROCMFPX_RDNA35_NWARPS != 4 && GGML_ROCMFPX_RDNA35_NWARPS != 8
+#error "GGML_ROCMFPX_RDNA35_NWARPS must be one of: 1, 2, 4, 8"
+#endif
+
+#ifndef GGML_ROCMFPX_RDNA35_NWARPS_MAX_NCOLS
+#define GGML_ROCMFPX_RDNA35_NWARPS_MAX_NCOLS 2
+#endif
+
+#if GGML_ROCMFPX_RDNA35_NWARPS_MAX_NCOLS < 1 || GGML_ROCMFPX_RDNA35_NWARPS_MAX_NCOLS > MMVQ_MAX_BATCH_SIZE
+#error "GGML_ROCMFPX_RDNA35_NWARPS_MAX_NCOLS must be between 1 and MMVQ_MAX_BATCH_SIZE"
+#endif
+
+#ifndef GGML_ROCMFP2_RDNA35_NWARPS
+#define GGML_ROCMFP2_RDNA35_NWARPS GGML_ROCMFPX_RDNA35_NWARPS
+#endif
+
+#if GGML_ROCMFP2_RDNA35_NWARPS != 1 && GGML_ROCMFP2_RDNA35_NWARPS != 2 && \
+    GGML_ROCMFP2_RDNA35_NWARPS != 4 && GGML_ROCMFP2_RDNA35_NWARPS != 8
+#error "GGML_ROCMFP2_RDNA35_NWARPS must be one of: 1, 2, 4, 8"
+#endif
+
+#ifndef GGML_ROCMFP2_RDNA35_NWARPS_MAX_NCOLS
+#define GGML_ROCMFP2_RDNA35_NWARPS_MAX_NCOLS GGML_ROCMFPX_RDNA35_NWARPS_MAX_NCOLS
+#endif
+
+#ifndef GGML_ROCMFP2_RDNA35_NWARPS_MIN_NCOLS
+#define GGML_ROCMFP2_RDNA35_NWARPS_MIN_NCOLS 1
+#endif
+
+#if GGML_ROCMFP2_RDNA35_NWARPS_MIN_NCOLS < 1 || GGML_ROCMFP2_RDNA35_NWARPS_MIN_NCOLS > GGML_ROCMFP2_RDNA35_NWARPS_MAX_NCOLS
+#error "GGML_ROCMFP2_RDNA35_NWARPS_MIN_NCOLS must be between 1 and GGML_ROCMFP2_RDNA35_NWARPS_MAX_NCOLS"
+#endif
+
+#if GGML_ROCMFP2_RDNA35_NWARPS_MAX_NCOLS < 1 || GGML_ROCMFP2_RDNA35_NWARPS_MAX_NCOLS > MMVQ_MAX_BATCH_SIZE
+#error "GGML_ROCMFP2_RDNA35_NWARPS_MAX_NCOLS must be between 1 and MMVQ_MAX_BATCH_SIZE"
+#endif
+
+#ifndef GGML_ROCMFPX_RDNA35_MMID_MAX_BATCH
+#define GGML_ROCMFPX_RDNA35_MMID_MAX_BATCH MMVQ_MAX_BATCH_SIZE
+#endif
+
+#if GGML_ROCMFPX_RDNA35_MMID_MAX_BATCH < 1 || GGML_ROCMFPX_RDNA35_MMID_MAX_BATCH > MMVQ_MAX_BATCH_SIZE
+#error "GGML_ROCMFPX_RDNA35_MMID_MAX_BATCH must be between 1 and MMVQ_MAX_BATCH_SIZE"
+#endif
+
+#ifndef GGML_ROCMFPX_RDNA35_RPB_WIDE
+#define GGML_ROCMFPX_RDNA35_RPB_WIDE 1
+#endif
+
+#if GGML_ROCMFPX_RDNA35_RPB_WIDE != 1 && GGML_ROCMFPX_RDNA35_RPB_WIDE != 2
+#error "GGML_ROCMFPX_RDNA35_RPB_WIDE must be 1 or 2"
+#endif
+
+#ifndef GGML_ROCMFPX_MOE_MMVQ_ROWS_PER_BLOCK
+#define GGML_ROCMFPX_MOE_MMVQ_ROWS_PER_BLOCK 2
+#endif
+
+#if GGML_ROCMFPX_MOE_MMVQ_ROWS_PER_BLOCK < 1 || GGML_ROCMFPX_MOE_MMVQ_ROWS_PER_BLOCK > 4
+#error "GGML_ROCMFPX_MOE_MMVQ_ROWS_PER_BLOCK must be between 1 and 4"
+#endif
+
+#ifndef GGML_ROCMFPX_HY3_ADAPTIVE_MOE_RPB
+#define GGML_ROCMFPX_HY3_ADAPTIVE_MOE_RPB 0
+#endif
+
+#if GGML_ROCMFPX_HY3_ADAPTIVE_MOE_RPB != 0 && GGML_ROCMFPX_HY3_ADAPTIVE_MOE_RPB != 1
+#error "GGML_ROCMFPX_HY3_ADAPTIVE_MOE_RPB must be 0 or 1"
+#endif
+
+#if GGML_ROCMFP4_RDNA35_RPB_WIDE_DUAL != 1 && GGML_ROCMFP4_RDNA35_RPB_WIDE_DUAL != 2
+#error "GGML_ROCMFP4_RDNA35_RPB_WIDE_DUAL must be 1 or 2"
+#endif
+
+#if GGML_ROCMFP4_RDNA35_RPB_WIDE_FAST != 1 && GGML_ROCMFP4_RDNA35_RPB_WIDE_FAST != 2
+#error "GGML_ROCMFP4_RDNA35_RPB_WIDE_FAST must be 1 or 2"
+#endif
+
 typedef float (*vec_dot_q_cuda_t)(const void * __restrict__ vbq, const block_q8_1 * __restrict__ bq8_1, const int & kbx, const int & iqs);
 
 #if !defined(GGML_USE_HIP)
@@ -985,6 +1116,24 @@ static constexpr __device__ vec_dot_q_cuda_t get_vec_dot_q_cuda(ggml_type type) 
         case GGML_TYPE_Q8_0:    return vec_dot_q8_0_q8_1;
         case GGML_TYPE_Q8_0_G128: return vec_dot_q8_0_g128_q8_1;
         case GGML_TYPE_MXFP4:   return vec_dot_mxfp4_q8_1;
+        case GGML_TYPE_Q4_0_ROCMFP4:
+                                return vec_dot_rocmfp4_q8_1;
+        case GGML_TYPE_Q4_0_ROCMFP4_FAST:
+                                return vec_dot_rocmfp4_fast_q8_1;
+        case GGML_TYPE_Q4_0_ROCMI4:
+                                return vec_dot_rocmi4_q8_1;
+        case GGML_TYPE_Q3_0_ROCMFPX:
+                                return vec_dot_rocmfpx_fp3_q8_1;
+        case GGML_TYPE_Q5_0_ROCMFPX:
+                                return vec_dot_rocmfpx_fp5_q8_1;
+        case GGML_TYPE_Q2_0_ROCMFPX:
+                                return vec_dot_rocmfpx_fp2_q8_1;
+        case GGML_TYPE_Q6_0_ROCMFPX:
+                                return vec_dot_rocmfpx_fp6_q8_1;
+        case GGML_TYPE_Q7_0_ROCMFPX:
+                                return vec_dot_rocmfpx_fp7_q8_1;
+        case GGML_TYPE_Q8_0_ROCMFPX:
+                                return vec_dot_rocmfpx_fp8_q8_1;
         case GGML_TYPE_NVFP4:   return vec_dot_nvfp4_q8_1;
         case GGML_TYPE_Q2_K:    return vec_dot_q2_K_q8_1;
         case GGML_TYPE_Q3_K:    return vec_dot_q3_K_q8_1;
@@ -1019,6 +1168,24 @@ static constexpr __host__ __device__ int get_vdr_mmvq(ggml_type type) {
         case GGML_TYPE_Q8_0:    return VDR_Q8_0_Q8_1_MMVQ;
         case GGML_TYPE_Q8_0_G128: return VDR_Q8_0_G128_Q8_1_MMVQ;
         case GGML_TYPE_MXFP4:   return VDR_MXFP4_Q8_1_MMVQ;
+        case GGML_TYPE_Q4_0_ROCMFP4:
+                                return VDR_ROCMFP4_Q8_1_MMVQ;
+        case GGML_TYPE_Q4_0_ROCMFP4_FAST:
+                                return VDR_ROCMFP4_FAST_Q8_1_MMVQ;
+        case GGML_TYPE_Q4_0_ROCMI4:
+                                return VDR_ROCMI4_Q8_1_MMVQ;
+        case GGML_TYPE_Q3_0_ROCMFPX:
+                                return VDR_ROCMFP3_Q8_1_MMVQ;
+        case GGML_TYPE_Q5_0_ROCMFPX:
+                                return VDR_ROCMFP5_Q8_1_MMVQ;
+        case GGML_TYPE_Q2_0_ROCMFPX:
+                                return VDR_ROCMFP2_Q8_1_MMVQ;
+        case GGML_TYPE_Q6_0_ROCMFPX:
+                                return VDR_ROCMFP6_Q8_1_MMVQ;
+        case GGML_TYPE_Q7_0_ROCMFPX:
+                                return VDR_ROCMFP7_Q8_1_MMVQ;
+        case GGML_TYPE_Q8_0_ROCMFPX:
+                                return VDR_ROCMFP8_Q8_1_MMVQ;
         case GGML_TYPE_NVFP4:   return VDR_NVFP4_Q8_1_MMVQ;
         case GGML_TYPE_Q2_K:    return VDR_Q2_K_Q8_1_MMVQ;
         case GGML_TYPE_Q3_K:    return VDR_Q3_K_Q8_1_MMVQ;
@@ -1042,6 +1209,7 @@ enum mmvq_parameter_table_id {
     MMVQ_PARAMETERS_GCN,
     MMVQ_PARAMETERS_RDNA2,
     MMVQ_PARAMETERS_RDNA3_0,
+    MMVQ_PARAMETERS_RDNA3_5,
     MMVQ_PARAMETERS_RDNA4,
     MMVQ_PARAMETERS_GB10
 };
@@ -1049,9 +1217,11 @@ enum mmvq_parameter_table_id {
 static constexpr __device__ mmvq_parameter_table_id get_device_table_id() {
 #if defined(RDNA4)
     return MMVQ_PARAMETERS_RDNA4;
+#elif defined(RDNA3_5)
+    return MMVQ_PARAMETERS_RDNA3_5;
 #elif defined(RDNA3_0)
     return MMVQ_PARAMETERS_RDNA3_0;
-#elif defined(RDNA2) || defined(RDNA3_5)
+#elif defined(RDNA2)
     return MMVQ_PARAMETERS_RDNA2;
 #elif defined(GCN) || defined(CDNA)
     return MMVQ_PARAMETERS_GCN;
@@ -1071,7 +1241,10 @@ static __host__ mmvq_parameter_table_id get_device_table_id(int cc) {
     if (GGML_CUDA_CC_IS_RDNA3_0(cc)) {
         return MMVQ_PARAMETERS_RDNA3_0;
     }
-    if (GGML_CUDA_CC_IS_RDNA2(cc) || GGML_CUDA_CC_IS_RDNA3_5(cc)) {
+    if (GGML_CUDA_CC_IS_RDNA3_5(cc)) {
+        return MMVQ_PARAMETERS_RDNA3_5;
+    }
+    if (GGML_CUDA_CC_IS_RDNA2(cc)) {
         return MMVQ_PARAMETERS_RDNA2;
     }
     if (GGML_CUDA_CC_IS_GCN(cc) || GGML_CUDA_CC_IS_CDNA(cc)) {
@@ -1102,6 +1275,10 @@ static constexpr __host__ __device__ int get_mmvq_mmid_max_batch_pascal_older(gg
         case GGML_TYPE_IQ4_NL:  return 6;
         case GGML_TYPE_IQ4_XS:  return 5;
         case GGML_TYPE_MXFP4:   return 4;
+        case GGML_TYPE_Q4_0_ROCMFP4:
+                                return 4;
+        case GGML_TYPE_Q4_0_ROCMFP4_FAST:
+                                return 4;
         case GGML_TYPE_NVFP4:   return 4;
         case GGML_TYPE_Q2_K:    return 4;
         case GGML_TYPE_Q3_K:    return 4;
@@ -1123,6 +1300,10 @@ static constexpr __host__ __device__ int get_mmvq_mmid_max_batch_turing_plus(ggm
         case GGML_TYPE_IQ3_S:   return 6;
         case GGML_TYPE_IQ3_XXS: return 7;
         case GGML_TYPE_MXFP4:   return 7;
+        case GGML_TYPE_Q4_0_ROCMFP4:
+                                return 7;
+        case GGML_TYPE_Q4_0_ROCMFP4_FAST:
+                                return 7;
         case GGML_TYPE_NVFP4:   return 8;
         case GGML_TYPE_Q2_K:    return 7;
         case GGML_TYPE_Q3_K:    return 5;
@@ -1198,6 +1379,23 @@ static constexpr __host__ __device__ int get_mmvq_mmid_max_batch_rdna3(ggml_type
     }
 }
 
+static constexpr __host__ __device__ int get_mmvq_mmid_max_batch_rdna3_5(ggml_type type) {
+    switch (type) {
+        case GGML_TYPE_Q4_0_ROCMFP4:
+        case GGML_TYPE_Q4_0_ROCMFP4_FAST:
+        case GGML_TYPE_Q4_0_ROCMI4:
+                                return GGML_ROCMFP4_RDNA35_MMID_MAX_BATCH;
+        case GGML_TYPE_Q3_0_ROCMFPX:
+        case GGML_TYPE_Q2_0_ROCMFPX:
+        case GGML_TYPE_Q5_0_ROCMFPX:
+        case GGML_TYPE_Q6_0_ROCMFPX:
+        case GGML_TYPE_Q7_0_ROCMFPX:
+        case GGML_TYPE_Q8_0_ROCMFPX:
+                                return GGML_ROCMFPX_RDNA35_MMID_MAX_BATCH;
+        default:                return get_mmvq_mmid_max_batch_rdna3(type);
+    }
+}
+
 static constexpr __host__ __device__ int get_mmvq_mmid_max_batch_rdna4(ggml_type type) {
     switch (type) {
         case GGML_TYPE_IQ1_S:   return 7;
@@ -1210,6 +1408,10 @@ static constexpr __host__ __device__ int get_mmvq_mmid_max_batch_rdna4(ggml_type
         case GGML_TYPE_IQ4_NL:  return 7;
         case GGML_TYPE_IQ4_XS:  return 5;
         case GGML_TYPE_MXFP4:   return 5;
+        case GGML_TYPE_Q4_0_ROCMFP4:
+                                return 5;
+        case GGML_TYPE_Q4_0_ROCMFP4_FAST:
+                                return 5;
         case GGML_TYPE_NVFP4:   return 5;
         case GGML_TYPE_Q3_K:    return 4;
         case GGML_TYPE_Q4_0:    return 7;
@@ -1241,6 +1443,9 @@ int get_mmvq_mmid_max_batch(ggml_type type, int cc) {
     if (GGML_CUDA_CC_IS_AMD(cc)) {
         if (GGML_CUDA_CC_IS_RDNA4(cc)) {
             return get_mmvq_mmid_max_batch_rdna4(type);
+        }
+        if (GGML_CUDA_CC_IS_RDNA3_5(cc)) {
+            return get_mmvq_mmid_max_batch_rdna3_5(type);
         }
         if (GGML_CUDA_CC_IS_RDNA3(cc)) {
             return get_mmvq_mmid_max_batch_rdna3(type);
@@ -1462,6 +1667,33 @@ static constexpr __host__ __device__ int calc_nwarps(ggml_type type, int ncols_d
         }
         return 1;
     }
+    if (table_id == MMVQ_PARAMETERS_RDNA3_5) {
+        if (ncols_dst < 1) {
+            return 1;
+        }
+        switch (type) {
+            // NOTE: giving stock Q4_0 the ROCmFP4 RDNA3.5 config (nwarps=2)
+            // was tried and measured ~2.3% SLOWER tg on gfx1151 (Q4_0's
+            // access pattern differs), so Q4_0 is intentionally left at the
+            // default nwarps=1 here. Run Google QAT (Q4_0) models natively;
+            // do not add Q4_0 to this switch without a fresh gfx1151 A/B.
+            case GGML_TYPE_Q4_0_ROCMFP4:
+            case GGML_TYPE_Q4_0_ROCMFP4_FAST:
+            case GGML_TYPE_Q4_0_ROCMI4:
+                return ncols_dst <= GGML_ROCMFP4_RDNA35_NWARPS_MAX_NCOLS ? GGML_ROCMFP4_RDNA35_NWARPS : 1;
+            case GGML_TYPE_Q2_0_ROCMFPX:
+                return ncols_dst >= GGML_ROCMFP2_RDNA35_NWARPS_MIN_NCOLS &&
+                       ncols_dst <= GGML_ROCMFP2_RDNA35_NWARPS_MAX_NCOLS ? GGML_ROCMFP2_RDNA35_NWARPS : 1;
+            case GGML_TYPE_Q3_0_ROCMFPX:
+            case GGML_TYPE_Q5_0_ROCMFPX:
+            case GGML_TYPE_Q6_0_ROCMFPX:
+            case GGML_TYPE_Q7_0_ROCMFPX:
+            case GGML_TYPE_Q8_0_ROCMFPX:
+                return ncols_dst <= GGML_ROCMFPX_RDNA35_NWARPS_MAX_NCOLS ? GGML_ROCMFPX_RDNA35_NWARPS : 1;
+            default:
+                return 1;
+        }
+    }
     if (table_id == MMVQ_PARAMETERS_RDNA3_0) {
         // RDNA3 (W7900): stricter whitelist than RDNA4.
         // Q2_K / Q5_K / IQ4_XS regress in full quant sweeps.
@@ -1534,7 +1766,7 @@ static constexpr __host__ __device__ int calc_nwarps(ggml_type type, int ncols_d
     return 1;
 }
 
-static constexpr __host__ __device__ int calc_rows_per_block(int ncols_dst, int table_id, bool small_k = false, int nwarps = 1) {
+static constexpr __host__ __device__ int calc_rows_per_block(ggml_type type, int ncols_dst, int table_id, bool small_k = false, int nwarps = 1) {
     if (table_id == MMVQ_PARAMETERS_GENERIC || table_id == MMVQ_PARAMETERS_GCN || table_id == MMVQ_PARAMETERS_TURING || table_id == MMVQ_PARAMETERS_GB10) {
         switch (ncols_dst) {
             case 1:
@@ -1549,6 +1781,26 @@ static constexpr __host__ __device__ int calc_rows_per_block(int ncols_dst, int 
                 return 2;
             default:
                 return 1;
+        }
+    }
+    if (table_id == MMVQ_PARAMETERS_RDNA3_5) {
+        if (ncols_dst >= 5 && ncols_dst <= 8) {
+            switch (type) {
+                case GGML_TYPE_Q4_0_ROCMFP4:
+                    return GGML_ROCMFP4_RDNA35_RPB_WIDE_DUAL;
+                case GGML_TYPE_Q4_0_ROCMFP4_FAST:
+                case GGML_TYPE_Q4_0_ROCMI4:
+                    return GGML_ROCMFP4_RDNA35_RPB_WIDE_FAST;
+                case GGML_TYPE_Q3_0_ROCMFPX:
+                case GGML_TYPE_Q2_0_ROCMFPX:
+                case GGML_TYPE_Q5_0_ROCMFPX:
+                case GGML_TYPE_Q6_0_ROCMFPX:
+                case GGML_TYPE_Q7_0_ROCMFPX:
+                case GGML_TYPE_Q8_0_ROCMFPX:
+                    return GGML_ROCMFPX_RDNA35_RPB_WIDE;
+                default:
+                    break;
+            }
         }
     }
     return 1;
@@ -1591,7 +1843,7 @@ static __global__ void mul_mat_vec_q(
     constexpr int vdr = get_vdr_mmvq(type);
     constexpr mmvq_parameter_table_id table_id = get_device_table_id();
     constexpr int nwarps = nwarps_override > 0 ? nwarps_override : calc_nwarps(type, ncols_dst, table_id, small_k, halve_iters);
-    constexpr int rows_per_cuda_block = calc_rows_per_block(ncols_dst, table_id, small_k, nwarps);
+    constexpr int rows_per_cuda_block = calc_rows_per_block(type, ncols_dst, table_id, small_k, nwarps);
     constexpr int warp_size = ggml_cuda_get_physical_warp_size();
 
     constexpr vec_dot_q_cuda_t vec_dot_q_cuda = get_vec_dot_q_cuda(type);
@@ -1756,6 +2008,19 @@ static __global__ void mul_mat_vec_q(
         }
 #endif
 
+        if constexpr (type == GGML_TYPE_Q2_0_ROCMFPX) {
+#pragma unroll
+            for (int i = 0; i < rows_per_cuda_block; ++i) {
+                vec_dot_rocmfpx_fp2_q8_1_ncols(
+                    vx, y, stride_col_y, kbx_offset + i*stride_row_x + kbx, kby, kqs, tmp, i);
+                if constexpr (has_fusion) {
+                    if (use_gate) {
+                        vec_dot_rocmfpx_fp2_q8_1_ncols(
+                            vgate, y, stride_col_y, kbx_offset + i*stride_row_x + kbx, kby, kqs, tmp_gate, i);
+                    }
+                }
+            }
+        } else {
 #pragma unroll
         for (int j = 0; j < ncols_dst; ++j) {
 #pragma unroll
@@ -1779,6 +2044,7 @@ static __global__ void mul_mat_vec_q(
                     }
                 }
             }
+        }
         }
     }
 
@@ -2109,7 +2375,7 @@ static std::pair<dim3, dim3> calc_launch_params(
         const int ncols_dst, const int nrows_x, const int nchannels_dst, const int nsamples_or_ntokens,
         const int warp_size, const mmvq_parameter_table_id table_id, const bool small_k = false, const bool halve_iters = false) {
     const int nwarps = calc_nwarps(type, ncols_dst, table_id, small_k, halve_iters);
-    const int rpb = calc_rows_per_block(ncols_dst, table_id, small_k, nwarps);
+    const int rpb = calc_rows_per_block(type, ncols_dst, table_id, small_k, nwarps);
     const int64_t nblocks = (nrows_x + rpb - 1) / rpb;
     const dim3 block_nums(nblocks, nchannels_dst, nsamples_or_ntokens);
     const dim3 block_dims(warp_size, nwarps, 1);
@@ -2152,6 +2418,76 @@ static void mul_mat_vec_q_switch_fusion(
         sample_ratio, stride_sample_x, stride_sample_y, stride_sample_dst, ids_stride);
 }
 
+// FP2 has a small payload but a non-trivial byte-to-int8 expansion. Reuse the
+// expanded weights across all verification columns instead of decoding them
+// once per column.
+template <int ncols_dst, int rows_per_cuda_block>
+static __device__ __forceinline__ void vec_dot_rocmfpx_fp2_q8_1_ncols(
+        const void * __restrict__ vx,
+        const block_q8_1 * __restrict__ y,
+        const uint32_t stride_col_y,
+        const int kbx,
+        const int kby,
+        const int kqs,
+        float (&tmp)[ncols_dst][rows_per_cuda_block],
+        const int row) {
+    const block_rocmfp2 * bq2 = (const block_rocmfp2 *) vx + kbx;
+
+    int values[VDR_ROCMFP2_Q8_1_MMVQ];
+#pragma unroll
+    for (int i = 0; i < VDR_ROCMFP2_Q8_1_MMVQ; ++i) {
+        values[i] = rocmfpx_pack4_fp2_vec_cuda(bq2->qs[kqs + i]);
+    }
+
+#if VDR_ROCMFP2_Q8_1_MMVQ <= 4
+    const float dx = rocmfpx_ue4m3_to_fp32_finite(bq2->e[kqs / 4]);
+#endif
+
+#pragma unroll
+    for (int j = 0; j < ncols_dst; ++j) {
+        const block_q8_1 * bq8 = &y[j*stride_col_y + kby];
+        const int * q8 = (const int *) bq8->qs;
+
+#if VDR_ROCMFP2_Q8_1_MMVQ <= 4
+        int sumi = 0;
+#pragma unroll
+        for (int i = 0; i < VDR_ROCMFP2_Q8_1_MMVQ; ++i) {
+            sumi = ggml_cuda_dp4a(values[i], q8[kqs + i], sumi);
+        }
+        tmp[j][row] += dx * __low2float(bq8->ds) * sumi;
+#else
+        int sumi0 = 0;
+        int sumi1 = 0;
+#pragma unroll
+        for (int i = 0; i < VDR_ROCMFP2_Q8_1_MMVQ; ++i) {
+            const int group = kqs + i;
+            if (group < QI_ROCMFP2/2) {
+                sumi0 = ggml_cuda_dp4a(values[i], q8[group], sumi0);
+            } else {
+                sumi1 = ggml_cuda_dp4a(values[i], q8[group], sumi1);
+            }
+        }
+        const float dx0 = rocmfpx_ue4m3_to_fp32_finite(bq2->e[0]);
+        const float dx1 = rocmfpx_ue4m3_to_fp32_finite(bq2->e[1]);
+        tmp[j][row] += __low2float(bq8->ds) * (dx0*sumi0 + dx1*sumi1);
+#endif
+    }
+}
+
+template <ggml_type type>
+static constexpr int calc_moe_mmvq_rows_per_block() {
+#if defined(GGML_USE_HIP)
+    if constexpr (type == GGML_TYPE_Q4_0_ROCMFP4 || type == GGML_TYPE_Q4_0_ROCMFP4_FAST || type == GGML_TYPE_Q4_0_ROCMI4) {
+        return GGML_ROCMFP4_MOE_MMVQ_ROWS_PER_BLOCK;
+    }
+    if constexpr (type == GGML_TYPE_Q2_0_ROCMFPX || type == GGML_TYPE_Q3_0_ROCMFPX || type == GGML_TYPE_Q5_0_ROCMFPX ||
+                  type == GGML_TYPE_Q6_0_ROCMFPX || type == GGML_TYPE_Q7_0_ROCMFPX || type == GGML_TYPE_Q8_0_ROCMFPX) {
+        return GGML_ROCMFPX_MOE_MMVQ_ROWS_PER_BLOCK;
+    }
+#endif
+    return 2;
+}
+
 template <ggml_type type, bool has_fusion = false, bool has_clamp = false>
 static void mul_mat_vec_q_moe_launch(
         const void * vx, const void * vy, const int32_t * ids,
@@ -2166,7 +2502,7 @@ static void mul_mat_vec_q_moe_launch(
         const float up_min, const float up_max, const float gate_min,
         const float gate_max, cudaStream_t stream) {
 
-    constexpr int rows_per_block = 2; // 2 gives best perf based on tuning
+    constexpr int rows_per_block = calc_moe_mmvq_rows_per_block<type>();
     const int64_t nblocks_rows = (nrows_x + rows_per_block - 1) / rows_per_block;
     const dim3 block_nums(nblocks_rows, nchannels_dst);
     const dim3 block_dims(warp_size, ncols_dst);
@@ -2568,6 +2904,60 @@ static void mul_mat_vec_q_switch_type(
             break;
         case GGML_TYPE_MXFP4:
             mul_mat_vec_q_switch_ncols_dst<GGML_TYPE_MXFP4>
+                (vx, vy, ids, fusion, dst, ncols_x, nrows_x, ncols_dst, stride_row_x, stride_col_y, stride_col_dst,
+                 nchannels_x, nchannels_y, nchannels_dst, stride_channel_x, stride_channel_y, stride_channel_dst,
+                 nsamples_x, nsamples_dst, stride_sample_x, stride_sample_y, stride_sample_dst, ids_stride, stream, allow_small_k);
+            break;
+        case GGML_TYPE_Q4_0_ROCMFP4:
+            mul_mat_vec_q_switch_ncols_dst<GGML_TYPE_Q4_0_ROCMFP4>
+                (vx, vy, ids, fusion, dst, ncols_x, nrows_x, ncols_dst, stride_row_x, stride_col_y, stride_col_dst,
+                 nchannels_x, nchannels_y, nchannels_dst, stride_channel_x, stride_channel_y, stride_channel_dst,
+                 nsamples_x, nsamples_dst, stride_sample_x, stride_sample_y, stride_sample_dst, ids_stride, stream, allow_small_k);
+            break;
+        case GGML_TYPE_Q4_0_ROCMFP4_FAST:
+            mul_mat_vec_q_switch_ncols_dst<GGML_TYPE_Q4_0_ROCMFP4_FAST>
+                (vx, vy, ids, fusion, dst, ncols_x, nrows_x, ncols_dst, stride_row_x, stride_col_y, stride_col_dst,
+                 nchannels_x, nchannels_y, nchannels_dst, stride_channel_x, stride_channel_y, stride_channel_dst,
+                 nsamples_x, nsamples_dst, stride_sample_x, stride_sample_y, stride_sample_dst, ids_stride, stream, allow_small_k);
+            break;
+        case GGML_TYPE_Q4_0_ROCMI4:
+            mul_mat_vec_q_switch_ncols_dst<GGML_TYPE_Q4_0_ROCMI4>
+                (vx, vy, ids, fusion, dst, ncols_x, nrows_x, ncols_dst, stride_row_x, stride_col_y, stride_col_dst,
+                 nchannels_x, nchannels_y, nchannels_dst, stride_channel_x, stride_channel_y, stride_channel_dst,
+                 nsamples_x, nsamples_dst, stride_sample_x, stride_sample_y, stride_sample_dst, ids_stride, stream, allow_small_k);
+            break;
+        case GGML_TYPE_Q3_0_ROCMFPX:
+            mul_mat_vec_q_switch_ncols_dst<GGML_TYPE_Q3_0_ROCMFPX>
+                (vx, vy, ids, fusion, dst, ncols_x, nrows_x, ncols_dst, stride_row_x, stride_col_y, stride_col_dst,
+                 nchannels_x, nchannels_y, nchannels_dst, stride_channel_x, stride_channel_y, stride_channel_dst,
+                 nsamples_x, nsamples_dst, stride_sample_x, stride_sample_y, stride_sample_dst, ids_stride, stream, allow_small_k);
+            break;
+        case GGML_TYPE_Q5_0_ROCMFPX:
+            mul_mat_vec_q_switch_ncols_dst<GGML_TYPE_Q5_0_ROCMFPX>
+                (vx, vy, ids, fusion, dst, ncols_x, nrows_x, ncols_dst, stride_row_x, stride_col_y, stride_col_dst,
+                 nchannels_x, nchannels_y, nchannels_dst, stride_channel_x, stride_channel_y, stride_channel_dst,
+                 nsamples_x, nsamples_dst, stride_sample_x, stride_sample_y, stride_sample_dst, ids_stride, stream, allow_small_k);
+            break;
+        case GGML_TYPE_Q2_0_ROCMFPX:
+            mul_mat_vec_q_switch_ncols_dst<GGML_TYPE_Q2_0_ROCMFPX>
+                (vx, vy, ids, fusion, dst, ncols_x, nrows_x, ncols_dst, stride_row_x, stride_col_y, stride_col_dst,
+                 nchannels_x, nchannels_y, nchannels_dst, stride_channel_x, stride_channel_y, stride_channel_dst,
+                 nsamples_x, nsamples_dst, stride_sample_x, stride_sample_y, stride_sample_dst, ids_stride, stream, allow_small_k);
+            break;
+        case GGML_TYPE_Q6_0_ROCMFPX:
+            mul_mat_vec_q_switch_ncols_dst<GGML_TYPE_Q6_0_ROCMFPX>
+                (vx, vy, ids, fusion, dst, ncols_x, nrows_x, ncols_dst, stride_row_x, stride_col_y, stride_col_dst,
+                 nchannels_x, nchannels_y, nchannels_dst, stride_channel_x, stride_channel_y, stride_channel_dst,
+                 nsamples_x, nsamples_dst, stride_sample_x, stride_sample_y, stride_sample_dst, ids_stride, stream, allow_small_k);
+            break;
+        case GGML_TYPE_Q7_0_ROCMFPX:
+            mul_mat_vec_q_switch_ncols_dst<GGML_TYPE_Q7_0_ROCMFPX>
+                (vx, vy, ids, fusion, dst, ncols_x, nrows_x, ncols_dst, stride_row_x, stride_col_y, stride_col_dst,
+                 nchannels_x, nchannels_y, nchannels_dst, stride_channel_x, stride_channel_y, stride_channel_dst,
+                 nsamples_x, nsamples_dst, stride_sample_x, stride_sample_y, stride_sample_dst, ids_stride, stream, allow_small_k);
+            break;
+        case GGML_TYPE_Q8_0_ROCMFPX:
+            mul_mat_vec_q_switch_ncols_dst<GGML_TYPE_Q8_0_ROCMFPX>
                 (vx, vy, ids, fusion, dst, ncols_x, nrows_x, ncols_dst, stride_row_x, stride_col_y, stride_col_dst,
                  nchannels_x, nchannels_y, nchannels_dst, stride_channel_x, stride_channel_y, stride_channel_dst,
                  nsamples_x, nsamples_dst, stride_sample_x, stride_sample_y, stride_sample_dst, ids_stride, stream, allow_small_k);

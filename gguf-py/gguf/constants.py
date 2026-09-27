@@ -715,6 +715,7 @@ class MODEL_TENSOR(IntEnum):
     LAYER_OUT_NORM       = auto()
     LAYER_OUT_SCALE      = auto()
     PER_LAYER_TOKEN_EMBD = auto() # gemma3n
+    PLE_NGRAM_EMBD       = auto() # qwen4exp, one tensor per n-gram head
     PER_LAYER_MODEL_PROJ = auto() # gemma3n
     PER_LAYER_INP_GATE   = auto() # gemma3n
     PER_LAYER_PROJ       = auto() # gemma3n
@@ -1486,6 +1487,7 @@ TENSOR_NAMES: dict[MODEL_TENSOR, str] = {
     MODEL_TENSOR.LAYER_OUT_NORM:            "blk.{bid}.layer_output_norm",
     MODEL_TENSOR.LAYER_OUT_SCALE:           "blk.{bid}.layer_output_scale",
     MODEL_TENSOR.PER_LAYER_TOKEN_EMBD:      "per_layer_token_embd",           # gemma3n
+    MODEL_TENSOR.PLE_NGRAM_EMBD:            "ple_ngram_embd.{bid}",           # qwen4exp
     MODEL_TENSOR.PER_LAYER_MODEL_PROJ:      "per_layer_model_proj",           # gemma3n
     MODEL_TENSOR.PER_LAYER_PROJ_NORM:       "per_layer_proj_norm",            # gemma3n
     MODEL_TENSOR.ALTUP_UNEMBD_PROJ:         "altup_unembd_proj",              # gemma3n
@@ -2989,6 +2991,7 @@ MODEL_TENSORS: dict[MODEL_ARCH, list[MODEL_TENSOR]] = {
         MODEL_TENSOR.NEXTN_HC_HEAD_NORM,
         MODEL_TENSOR.NEXTN_HC_HEAD_DOWN,
         MODEL_TENSOR.NEXTN_HC_HEAD_UP,
+        MODEL_TENSOR.PLE_NGRAM_EMBD,
         MODEL_TENSOR.PLE_KEY,
         MODEL_TENSOR.PLE_VALUE,
         MODEL_TENSOR.PLE_NORM_KEY,
@@ -5771,6 +5774,20 @@ class GGMLQuantizationType(IntEnum):
     PTQ1_0  = 143
     F8_E4M3 = 54
 
+    # Stable ROCmFPX GGUF tensor type IDs (mirrors ggml_type in ggml.h).
+    Q4_0_ROCMFP4      = 100
+    Q4_0_ROCMFP4_FAST = 101
+    Q6_0_ROCMFPX      = 102
+    Q8_0_ROCMFPX      = 103
+    Q3_0_ROCMFPX      = 104
+    TURBO3_0          = 105
+    TURBO4_0          = 106
+    Q2_0_ROCMFPX_LEGACY_AMBIGUOUS = 107
+    Q4_0_ROCMI4       = 108
+    Q5_0_ROCMFPX      = 109
+    Q7_0_ROCMFPX      = 110
+    Q2_0_ROCMFPX      = 111
+
 
 class ExpertGatingFuncType(IntEnum):
     SOFTMAX       = 1
@@ -5830,6 +5847,30 @@ class LlamaFileType(IntEnum):
     MOSTLY_PQ2_0_LEGACY  = 142
     MOSTLY_PTQ1_0        = 143
     MOSTLY_F8_E4M3       = 42  # except 1d tensors
+
+    # Stable ROCmFPX GGUF file type IDs (mirrors llama_ftype in llama.h).
+    MOSTLY_Q4_0_ROCMFP4          = 100
+    MOSTLY_Q4_0_ROCMFP4_LEAN     = 101
+    MOSTLY_Q4_0_ROCMFP4_COHERENT = 102
+    MOSTLY_Q4_0_ROCMFP4_FAST     = 103
+    MOSTLY_Q4_0_ROCMFP4_FAST_COHERENT = 104
+    MOSTLY_Q4_0_ROCMFP4_STRIX    = 105
+    MOSTLY_Q4_0_ROCMFP4_STRIX_LEAN = 106
+    MOSTLY_Q6_0_ROCMFPX          = 110
+    MOSTLY_Q8_0_ROCMFPX          = 111
+    MOSTLY_Q3_0_ROCMFPX          = 112
+    MOSTLY_Q3_0_ROCMFPX_AGENT    = 113
+    MOSTLY_Q6_0_ROCMFPX_AGENT    = 114
+    MOSTLY_Q8_0_ROCMFPX_AGENT    = 115
+    MOSTLY_Q6_0_ROCMFPX_LEAN     = 116
+    MOSTLY_Q6_0_ROCMFPX_AGENT_LEAN = 117
+    MOSTLY_Q4_0_ROCMI4           = 118
+    MOSTLY_Q2_0_ROCMFPX          = 119
+    MOSTLY_Q5_0_ROCMFPX          = 120
+    MOSTLY_Q5_0_ROCMFPX_AGENT    = 121
+    MOSTLY_Q7_0_ROCMFPX          = 122
+    MOSTLY_Q7_0_ROCMFPX_AGENT    = 123
+    MOSTLY_Q2_0_ROCMFPX_AGENT    = 124
 
     GUESSED              = 1024  # not specified in the model file
 
@@ -5970,6 +6011,21 @@ GGML_QUANT_SIZES: dict[GGMLQuantizationType, tuple[int, int]] = {
     GGMLQuantizationType.PQ2_0:   (128, 2 + 32),
     GGMLQuantizationType.PTQ1_0:  (128, 2 + 24 + 2),
     GGMLQuantizationType.F8_E4M3: (1, 1),
+    GGMLQuantizationType.Q4_0_ROCMFP4:      (32, 2 + 16),
+    GGMLQuantizationType.Q4_0_ROCMFP4_FAST: (32, 1 + 16),
+    GGMLQuantizationType.Q6_0_ROCMFPX:      (32, 24 + 2),
+    GGMLQuantizationType.Q8_0_ROCMFPX:      (32, 32 + 1),
+    GGMLQuantizationType.Q3_0_ROCMFPX:      (32, 12 + 2),
+    GGMLQuantizationType.TURBO3_0:          (32, 12 + 2),
+    GGMLQuantizationType.TURBO4_0:          (32, 16 + 2),
+    # Type 107 has two incompatible interpretations. Its size is registered so
+    # migration tools can inspect it, but no quant/dequant implementation may
+    # select a layout automatically.
+    GGMLQuantizationType.Q2_0_ROCMFPX_LEGACY_AMBIGUOUS: (32, 8 + 2),
+    GGMLQuantizationType.Q4_0_ROCMI4:       (32, 1 + 16),
+    GGMLQuantizationType.Q5_0_ROCMFPX:      (32, 20 + 2),
+    GGMLQuantizationType.Q7_0_ROCMFPX:      (32, 28 + 2),
+    GGMLQuantizationType.Q2_0_ROCMFPX:      (32, 8 + 2),
 }
 
 

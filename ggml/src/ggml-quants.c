@@ -5,6 +5,8 @@
 #include "ggml-impl.h"
 #include "ggml-cpu/ggml-cpu-impl.h"
 #include "ggml-cpu.h"
+#include "../rocmfp4/rocmfp4.h"
+#include "../rocmfpx/rocmfpx.h"
 
 #include <math.h>
 #include <string.h>
@@ -5901,6 +5903,69 @@ bool ggml_validate_row_data(enum ggml_type type, const void * data, size_t nbyte
             {
                 VALIDATE_ROW_DATA_D_F16_IMPL(block_q4_0, data, nb);
             } break;
+        case GGML_TYPE_Q4_0_ROCMFP4:
+            {
+                if (!rocmfp4_validate_row_data(data, nbytes)) {
+                    fprintf(stderr, "%s: invalid ROCmFP4 row data\n", __func__);
+                    return false;
+                }
+            } break;
+        case GGML_TYPE_Q4_0_ROCMFP4_FAST:
+            {
+                if (!rocmfp4_validate_row_data_fast(data, nbytes)) {
+                    fprintf(stderr, "%s: invalid ROCmFP4 fast row data\n", __func__);
+                    return false;
+                }
+            } break;
+        case GGML_TYPE_Q3_0_ROCMFPX:
+            {
+                if (!rocmfpx_validate_row_data_fp3(data, nbytes)) {
+                    fprintf(stderr, "%s: invalid ROCmFPx FP3 row data\n", __func__);
+                    return false;
+                }
+            } break;
+        case GGML_TYPE_Q5_0_ROCMFPX:
+            {
+                if (!rocmfpx_validate_row_data_fp5(data, nbytes)) {
+                    fprintf(stderr, "%s: invalid ROCmFPx FP5 row data\n", __func__);
+                    return false;
+                }
+            } break;
+        case GGML_TYPE_Q2_0_ROCMFPX:
+            {
+                if (!rocmfpx_validate_row_data_fp2(data, nbytes)) {
+                    fprintf(stderr, "%s: invalid ROCmFPx FP2 row data\n", __func__);
+                    return false;
+                }
+            } break;
+        case GGML_TYPE_Q6_0_ROCMFPX:
+            {
+                if (!rocmfpx_validate_row_data_fp6(data, nbytes)) {
+                    fprintf(stderr, "%s: invalid ROCmFPx FP6 row data\n", __func__);
+                    return false;
+                }
+            } break;
+        case GGML_TYPE_Q7_0_ROCMFPX:
+            {
+                if (!rocmfpx_validate_row_data_fp7(data, nbytes)) {
+                    fprintf(stderr, "%s: invalid ROCmFPx FP7 row data\n", __func__);
+                    return false;
+                }
+            } break;
+        case GGML_TYPE_Q8_0_ROCMFPX:
+            {
+                if (!rocmfpx_validate_row_data_fp8(data, nbytes)) {
+                    fprintf(stderr, "%s: invalid ROCmFPx FP8 row data\n", __func__);
+                    return false;
+                }
+            } break;
+        case GGML_TYPE_Q4_0_ROCMI4:
+            {
+                if (!rocmfpx_validate_row_data_i4(data, nbytes)) {
+                    fprintf(stderr, "%s: invalid ROCmI4 row data\n", __func__);
+                    return false;
+                }
+            } break;
         case GGML_TYPE_Q4_1:
             {
                 VALIDATE_ROW_DATA_DM_F16_IMPL(block_q4_1, data, nb, d, m);
@@ -6003,6 +6068,24 @@ bool ggml_validate_row_data(enum ggml_type type, const void * data, size_t nbyte
         case GGML_TYPE_TQ2_0:
             {
                 VALIDATE_ROW_DATA_D_F16_IMPL(block_tq2_0, data, nb);
+            } break;
+        case GGML_TYPE_TURBO3_0:
+            {
+                const block_turbo3_0 * q = (const block_turbo3_0 *) data;
+                for (size_t i = 0; i < nb; ++i) {
+                    if (!validate_fp16(q[i].norm, i)) {
+                        return false;
+                    }
+                }
+            } break;
+        case GGML_TYPE_TURBO4_0:
+            {
+                const block_turbo4_0 * q = (const block_turbo4_0 *) data;
+                for (size_t i = 0; i < nb; ++i) {
+                    if (!validate_fp16(q[i].norm, i)) {
+                        return false;
+                    }
+                }
             } break;
         case GGML_TYPE_IQ1_S:
             {

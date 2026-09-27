@@ -704,6 +704,7 @@ struct llama_model {
     struct ggml_tensor * per_layer_tok_embd   = nullptr;
     struct ggml_tensor * per_layer_tok_embd_scale = nullptr;
     struct ggml_tensor * per_layer_tok_embd_bias  = nullptr;   // EXL3 n-gram tables: per-head bias [head_dim, n_heads]
+    std::vector<ggml_tensor *> ple_ngram_embd;
 
     struct ggml_tensor * hc_head_norm = nullptr;
     struct ggml_tensor * hc_head_down = nullptr;
@@ -775,6 +776,8 @@ struct llama_model {
 
     int64_t t_load_us  = 0;
     int64_t t_start_us = 0;
+
+    uint64_t rocmfpx_plugin_model_id = 0;
 
     explicit llama_model(const llama_model_params & params);
     virtual ~llama_model();

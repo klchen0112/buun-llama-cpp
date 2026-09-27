@@ -150,6 +150,10 @@ if (CUDAToolkit_FOUND)
         list(APPEND GGML_SOURCES_CUDA ${SRCS})
     endif()
 
+    # ROCmFPX vector instances are independent of the standard-quant selection.
+    file(GLOB SRCS "template-instances/fattn-vec*rocmfp*.cu")
+    list(APPEND GGML_SOURCES_CUDA ${SRCS})
+
     ggml_add_backend_library(ggml-cuda
                              ${GGML_HEADERS_CUDA}
                              ${GGML_SOURCES_CUDA}
